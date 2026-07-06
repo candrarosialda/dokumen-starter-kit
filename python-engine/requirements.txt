@@ -1,0 +1,4 @@
+# Dependency engine akan ditambahkan per milestone.
+# Milestone PDF processing: pymupdf, pillow, pikepdf
+# Milestone Office export: python-docx, openpyxl, python-pptx
+pymupdf

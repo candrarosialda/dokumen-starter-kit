@@ -1,0 +1,1 @@
+"""Core infrastructure untuk Python document engine."""

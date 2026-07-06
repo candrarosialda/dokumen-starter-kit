@@ -1,0 +1,46 @@
+{
+  "name": "dokumen-starter-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplikasi desktop portable untuk melihat, mengedit, mengonversi, dan mengelola dokumen.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:desktop\"",
+    "dev:renderer": "vite",
+    "dev:desktop": "npm run build:electron && wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:renderer": "tsc -b && vite build",
+    "build": "npm run build:electron && npm run build:renderer",
+    "typecheck": "tsc -b --pretty false && tsc -p electron/tsconfig.json --noEmit --pretty false",
+    "lint": "eslint .",
+    "python:check": "python python-engine/main.py --health-check"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "latest",
+    "clsx": "latest",
+    "lucide-react": "latest",
+    "pdfjs-dist": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwindcss": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "cross-env": "latest",
+    "electron": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vite": "latest",
+    "wait-on": "latest"
+  }
+}
