@@ -61,7 +61,15 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   file: {
     readPdf: (filePath: string): Promise<Uint8Array> =>
       ipcRenderer.invoke('file:read-pdf', filePath),
+    readImageDataUrl: (
+          filePath: string,
+        ): Promise<string> =>
+          ipcRenderer.invoke(
+            'file:read-image-data-url',
+            filePath,
+          ),
   },
+
   python: {
     healthCheck: (): Promise<{ ok: boolean; engine: string; version: string }> =>
       ipcRenderer.invoke('python:health-check'),

@@ -50,7 +50,13 @@ declare global {
         ) => Promise<string | null>
       }
       file: {
-        readPdf: (filePath: string) => Promise<Uint8Array>
+        readPdf: (
+          filePath: string,
+        ) => Promise<Uint8Array>
+
+        readImageDataUrl: (
+          filePath: string,
+        ) => Promise<string>
       }
       python: {
         healthCheck: () => Promise<PythonHealth>

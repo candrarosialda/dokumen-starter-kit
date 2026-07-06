@@ -1,4 +1,6 @@
 import {
+  FileImage,
+  FileText,
   GripVertical,
   RotateCcw,
   RotateCw,
@@ -13,12 +15,9 @@ import {
   type MouseEvent,
 } from 'react'
 
-import {
-  clsx,
-} from 'clsx'
+import { clsx } from 'clsx'
 
 import type {
-  PDFDocumentProxy,
   RenderTask,
 } from 'pdfjs-dist'
 
@@ -26,13 +25,13 @@ import type {
   OrganizerPageItem,
 } from '../../../store/useOrganizerStore'
 
+import {
+  loadOrganizerImage,
+  loadOrganizerPdf,
+} from '../lib/organizerAssetCache'
+
 type OrganizerPageCardProps = {
-  pdfDocument:
-    PDFDocumentProxy
-
-  item:
-    OrganizerPageItem
-
+  item: OrganizerPageItem
   displayIndex: number
   selected: boolean
 
@@ -50,7 +49,6 @@ type OrganizerPageCardProps = {
 const THUMBNAIL_WIDTH = 150
 
 export function OrganizerPageCard({
-  pdfDocument,
   item,
   displayIndex,
   selected,
@@ -64,14 +62,19 @@ export function OrganizerPageCard({
     useRef<HTMLElement>(null)
 
   const canvasRef =
-    useRef<HTMLCanvasElement>(
-      null,
-    )
+    useRef<HTMLCanvasElement>(null)
 
   const [
     isVisible,
     setIsVisible,
   ] = useState(false)
+
+  const [
+    imageUrl,
+    setImageUrl,
+  ] = useState<string | null>(
+    null,
+  )
 
   const [
     isRendered,
@@ -88,6 +91,10 @@ export function OrganizerPageCard({
     setIsDragOver,
   ] = useState(false)
 
+  /*
+   * Thumbnail hanya dimuat ketika kartu
+   * mulai mendekati area yang terlihat.
+   */
   useEffect(() => {
     const card =
       cardRef.current
@@ -99,20 +106,19 @@ export function OrganizerPageCard({
     const observer =
       new IntersectionObserver(
         (entries) => {
-          if (
+          const visible =
             entries.some(
               (entry) =>
                 entry.isIntersecting,
             )
-          ) {
+
+          if (visible) {
             setIsVisible(true)
             observer.disconnect()
           }
         },
-
         {
-          rootMargin:
-            '400px',
+          rootMargin: '400px',
         },
       )
 
@@ -123,8 +129,55 @@ export function OrganizerPageCard({
     }
   }, [])
 
+  /*
+   * Muat preview gambar JPG atau PNG.
+   */
   useEffect(() => {
-    if (!isVisible) {
+    if (
+      !isVisible ||
+      item.kind !== 'image'
+    ) {
+      setImageUrl(null)
+      return
+    }
+
+    let disposed = false
+
+    setHasError(false)
+
+    void loadOrganizerImage(
+      item.sourceFile,
+    )
+      .then((url) => {
+        if (!disposed) {
+          setImageUrl(url)
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setHasError(true)
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [
+    isVisible,
+    item,
+  ])
+
+  /*
+   * Render halaman PDF ke canvas.
+   *
+   * pageNumber hanya boleh digunakan
+   * ketika jenis halaman adalah PDF.
+   */
+  useEffect(() => {
+    if (
+      !isVisible ||
+      item.kind !== 'pdf'
+    ) {
       return
     }
 
@@ -140,11 +193,20 @@ export function OrganizerPageCard({
     let renderTask:
       RenderTask | null = null
 
-    const renderPage =
+    setIsRendered(false)
+    setHasError(false)
+
+    const renderPdf =
       async (): Promise<void> => {
         try {
-          setHasError(false)
-          setIsRendered(false)
+          const pdfDocument =
+            await loadOrganizerPdf(
+              item.sourceFile,
+            )
+
+          if (disposed) {
+            return
+          }
 
           const page =
             await pdfDocument.getPage(
@@ -164,7 +226,6 @@ export function OrganizerPageCard({
           const baseViewport =
             page.getViewport({
               scale: 1,
-
               rotation:
                 effectiveRotation,
             })
@@ -176,7 +237,6 @@ export function OrganizerPageCard({
           const viewport =
             page.getViewport({
               scale,
-
               rotation:
                 effectiveRotation,
             })
@@ -188,13 +248,13 @@ export function OrganizerPageCard({
           canvas.width =
             Math.floor(
               viewport.width *
-              outputScale,
+                outputScale,
             )
 
           canvas.height =
             Math.floor(
               viewport.height *
-              outputScale,
+                outputScale,
             )
 
           canvas.style.width =
@@ -246,7 +306,7 @@ export function OrganizerPageCard({
         }
       }
 
-    void renderPage()
+    void renderPdf()
 
     return () => {
       disposed = true
@@ -254,9 +314,7 @@ export function OrganizerPageCard({
     }
   }, [
     isVisible,
-    item.pageNumber,
-    item.rotation,
-    pdfDocument,
+    item,
   ])
 
   function stopAndRun(
@@ -304,16 +362,22 @@ export function OrganizerPageCard({
     )
   }
 
+  const sourceLabel =
+    item.kind === 'pdf'
+      ? (
+          `${item.sourceFileName} • ` +
+          `Halaman ${item.pageNumber}`
+        )
+      : item.kind === 'image'
+        ? item.sourceFileName
+        : 'Halaman kosong A4'
+
   return (
     <article
       ref={cardRef}
       draggable
-      onDragStart={
-        handleDragStart
-      }
-      onDragOver={(
-        event,
-      ) => {
+      onDragStart={handleDragStart}
+      onDragOver={(event) => {
         event.preventDefault()
 
         event.dataTransfer.dropEffect =
@@ -324,12 +388,8 @@ export function OrganizerPageCard({
       onDragLeave={() =>
         setIsDragOver(false)
       }
-      onDrop={
-        handleDrop
-      }
-      onClick={
-        onToggle
-      }
+      onDrop={handleDrop}
+      onClick={onToggle}
       className={clsx(
         'group relative cursor-pointer rounded-2xl border p-3 transition',
 
@@ -352,9 +412,7 @@ export function OrganizerPageCard({
             type="checkbox"
             checked={selected}
             readOnly
-            onClick={(
-              event,
-            ) => {
+            onClick={(event) => {
               event.stopPropagation()
               onToggle()
             }}
@@ -362,56 +420,101 @@ export function OrganizerPageCard({
           />
 
           <span className="truncate text-xs font-semibold text-slate-300">
-            Posisi
-            {' '}
-            {displayIndex}
+            Posisi {displayIndex}
           </span>
         </div>
 
-        <span className="rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-500">
-          Asli
-          {' '}
-          {item.pageNumber}
-        </span>
-      </div>
-
-      <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-xl bg-slate-800/70 p-2">
-        {!isRendered &&
-          !hasError && (
-            <div className="absolute inset-0 animate-pulse bg-slate-800" />
-          )}
-
-        {hasError ? (
-          <p className="px-3 text-center text-xs text-red-300">
-            Halaman gagal dirender.
-          </p>
+        {item.kind === 'image' ? (
+          <FileImage
+            size={14}
+            className="text-violet-400"
+          />
         ) : (
-          <canvas
-            ref={canvasRef}
-            className={clsx(
-              'block max-h-56 max-w-full bg-white shadow-xl transition-opacity',
-
-              isRendered
-                ? 'opacity-100'
-                : 'opacity-0',
-            )}
+          <FileText
+            size={14}
+            className={
+              item.kind === 'blank'
+                ? 'text-slate-500'
+                : 'text-blue-400'
+            }
           />
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-xl bg-slate-800/70 p-2">
+        {hasError && (
+          <p className="px-3 text-center text-xs text-red-300">
+            Preview gagal dimuat.
+          </p>
+        )}
+
+        {!hasError &&
+          item.kind === 'blank' && (
+            <div
+              className="flex h-52 items-center justify-center bg-white text-xs text-slate-400 shadow-xl"
+              style={{
+                aspectRatio:
+                  `${item.width} / ${item.height}`,
+
+                transform:
+                  `rotate(${item.rotation}deg)`,
+              }}
+            >
+              Halaman kosong
+            </div>
+          )}
+
+        {!hasError &&
+          item.kind === 'image' &&
+          imageUrl && (
+            <img
+              src={imageUrl}
+              alt={item.sourceFileName}
+              className="max-h-52 max-w-full bg-white object-contain shadow-xl"
+              style={{
+                transform:
+                  `rotate(${item.rotation}deg)`,
+              }}
+            />
+          )}
+
+        {!hasError &&
+          item.kind === 'pdf' && (
+            <>
+              {!isRendered && (
+                <div className="absolute inset-0 animate-pulse bg-slate-800" />
+              )}
+
+              <canvas
+                ref={canvasRef}
+                className={clsx(
+                  'block max-h-56 max-w-full bg-white shadow-xl transition-opacity',
+
+                  isRendered
+                    ? 'opacity-100'
+                    : 'opacity-0',
+                )}
+              />
+            </>
+          )}
+      </div>
+
+      <p
+        className="mt-3 truncate text-[10px] text-slate-600"
+        title={sourceLabel}
+      >
+        {sourceLabel}
+      </p>
+
+      <div className="mt-2 flex items-center justify-between">
         <span className="text-[11px] text-slate-500">
-          Rotasi
-          {' '}
-          {item.rotation}°
+          Rotasi {item.rotation}°
         </span>
 
         <div className="flex gap-1">
           <button
             type="button"
-            onClick={(
-              event,
-            ) =>
+            onClick={(event) =>
               stopAndRun(
                 event,
                 onRotateLeft,
@@ -420,16 +523,12 @@ export function OrganizerPageCard({
             className="toolbar-button !h-8 !w-8"
             title="Putar ke kiri"
           >
-            <RotateCcw
-              size={15}
-            />
+            <RotateCcw size={15} />
           </button>
 
           <button
             type="button"
-            onClick={(
-              event,
-            ) =>
+            onClick={(event) =>
               stopAndRun(
                 event,
                 onRotateRight,
@@ -438,16 +537,12 @@ export function OrganizerPageCard({
             className="toolbar-button !h-8 !w-8"
             title="Putar ke kanan"
           >
-            <RotateCw
-              size={15}
-            />
+            <RotateCw size={15} />
           </button>
 
           <button
             type="button"
-            onClick={(
-              event,
-            ) =>
+            onClick={(event) =>
               stopAndRun(
                 event,
                 onDelete,
@@ -456,9 +551,7 @@ export function OrganizerPageCard({
             className="toolbar-button !h-8 !w-8 text-red-300 hover:bg-red-500/10"
             title="Hapus halaman"
           >
-            <Trash2
-              size={15}
-            />
+            <Trash2 size={15} />
           </button>
         </div>
       </div>

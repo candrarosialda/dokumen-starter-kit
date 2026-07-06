@@ -14,6 +14,8 @@ import {
   Trash2,
   Undo2,
   XCircle,
+  FileStack,
+  PlusSquare,
 } from 'lucide-react'
 
 import {
@@ -51,6 +53,12 @@ import {
 import {
   OrganizerPageCard,
 } from './components/OrganizerPageCard'
+
+import {
+  getImageNaturalSize,
+  loadOrganizerImage,
+  loadOrganizerPdf,
+} from './lib/organizerAssetCache'
 
 import '../viewer/lib/pdfWorker'
 
@@ -143,8 +151,8 @@ export function PageOrganizerPanel() {
     >(null)
 
   const [
-    isLoading,
-    setIsLoading,
+    isImporting,
+    setIsImporting,
   ] = useState(false)
 
   const [
@@ -177,6 +185,24 @@ export function PageOrganizerPanel() {
     useOrganizerStore(
       (state) =>
         state.initializeSession,
+    )
+
+  const appendBlankPage =
+    useOrganizerStore(
+      (state) =>
+        state.appendBlankPage,
+    )
+
+  const appendPdfPages =
+    useOrganizerStore(
+      (state) =>
+        state.appendPdfPages,
+    )
+
+  const appendImagePages =
+    useOrganizerStore(
+      (state) =>
+        state.appendImagePages,
     )
 
   const setOutputFile =
@@ -348,6 +374,8 @@ export function PageOrganizerPanel() {
 
           initializeSession(
             activeDocument.id,
+            activeDocument.filePath,
+            activeDocument.fileName,
             loadedDocument.numPages,
           )
         },
@@ -476,6 +504,143 @@ export function PageOrganizerPanel() {
     )
   }
 
+  function addBlankPage(): void {
+    if (
+      !activeDocument ||
+      isBusy ||
+      isImporting
+    ) {
+      return
+    }
+
+    appendBlankPage(
+      activeDocument.id,
+    )
+
+    setStatusMessage(
+      'Satu halaman kosong A4 ditambahkan.',
+    )
+  }
+
+  async function addExternalAssets(): Promise<void> {
+    if (
+      !activeDocument ||
+      isBusy ||
+      isImporting
+    ) {
+      return
+    }
+
+    const selectedAssets =
+      await window.desktopAPI.dialog
+        .selectOrganizerAssets()
+
+    if (
+      selectedAssets.length === 0
+    ) {
+      return
+    }
+
+    /*
+    * Simpan ID dokumen agar tidak berubah
+    * selama proses file asynchronous.
+    */
+    const documentId =
+      activeDocument.id
+
+    setIsImporting(true)
+
+    try {
+      let addedPageCount = 0
+
+      const imagePages: Array<{
+        sourceFile: string
+        sourceFileName: string
+        width: number
+        height: number
+      }> = []
+
+      for (
+        const asset of selectedAssets
+      ) {
+        if (asset.kind === 'pdf') {
+          const importedDocument =
+            await loadOrganizerPdf(
+              asset.filePath,
+            )
+
+          appendPdfPages(
+            documentId,
+            asset.filePath,
+            asset.fileName,
+            importedDocument.numPages,
+          )
+
+          addedPageCount +=
+            importedDocument.numPages
+
+          continue
+        }
+
+        const imageDataUrl =
+          await loadOrganizerImage(
+            asset.filePath,
+          )
+
+        const naturalSize =
+          await getImageNaturalSize(
+            imageDataUrl,
+          )
+
+        const isLandscape =
+          naturalSize.width >
+          naturalSize.height
+
+        imagePages.push({
+          sourceFile:
+            asset.filePath,
+
+          sourceFileName:
+            asset.fileName,
+
+          /*
+          * A4 landscape atau portrait.
+          */
+          width:
+            isLandscape
+              ? 842
+              : 595,
+
+          height:
+            isLandscape
+              ? 595
+              : 842,
+        })
+
+        addedPageCount += 1
+      }
+
+      if (imagePages.length > 0) {
+        appendImagePages(
+          documentId,
+          imagePages,
+        )
+      }
+
+      setStatusMessage(
+        `${addedPageCount} halaman berhasil ditambahkan.`,
+      )
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'PDF atau gambar gagal ditambahkan.',
+      )
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   async function chooseOutput(): Promise<void> {
     if (!activeDocument) {
       return
@@ -537,15 +702,53 @@ export function PageOrganizerPanel() {
               session.outputFile,
 
             pages:
-              pages.map(
-                (page) => ({
-                  pageNumber:
-                    page.pageNumber,
+              pages.map((page) => {
+                if (page.kind === 'pdf') {
+                  return {
+                    kind: 'pdf',
+
+                    sourceFile:
+                      page.sourceFile,
+
+                    pageNumber:
+                      page.pageNumber,
+
+                    rotation:
+                      page.rotation,
+                  }
+                }
+
+                if (page.kind === 'image') {
+                  return {
+                    kind: 'image',
+
+                    sourceFile:
+                      page.sourceFile,
+
+                    width:
+                      page.width,
+
+                    height:
+                      page.height,
+
+                    rotation:
+                      page.rotation,
+                  }
+                }
+
+                return {
+                  kind: 'blank',
+
+                  width:
+                    page.width,
+
+                  height:
+                    page.height,
 
                   rotation:
                     page.rotation,
-                }),
-              ),
+                }
+              }),
           },
         })
 
@@ -730,6 +933,51 @@ export function PageOrganizerPanel() {
             </button>
 
             <button
+                type="button"
+                disabled={
+                  isBusy ||
+                  isImporting
+                }
+                onClick={
+                  addBlankPage
+                }
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <PlusSquare
+                  size={15}
+                />
+
+                Halaman Kosong
+              </button>
+
+              <button
+                  type="button"
+                  disabled={
+                    isBusy ||
+                    isImporting
+                  }
+                  onClick={() =>
+                    void addExternalAssets()
+                  }
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-violet-500/30 px-3 text-xs font-semibold text-violet-300 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isImporting ? (
+                    <LoaderCircle
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <FileStack
+                      size={15}
+                    />
+                  )}
+
+                  {isImporting
+                    ? 'Menambahkan...'
+                    : 'Tambah PDF/Gambar'}
+                </button>
+
+            <button
               type="button"
               disabled={isBusy}
               onClick={() =>
@@ -818,9 +1066,6 @@ export function PageOrganizerPanel() {
                   ) => (
                     <OrganizerPageCard
                       key={page.id}
-                      pdfDocument={
-                        pdfDocument
-                      }
                       item={page}
                       displayIndex={
                         index + 1
@@ -857,13 +1102,13 @@ export function PageOrganizerPanel() {
                         )
                       }
                       onDropPage={(
-                        draggedId,
-                        targetId,
+                        draggedPageId,
+                        targetPageId,
                       ) =>
                         movePage(
                           activeDocument.id,
-                          draggedId,
-                          targetId,
+                          draggedPageId,
+                          targetPageId,
                         )
                       }
                     />
