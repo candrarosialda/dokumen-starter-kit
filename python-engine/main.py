@@ -15,7 +15,7 @@ ENGINE_NAME = (
     "Dokumen Starter Kit Python Engine"
 )
 
-ENGINE_VERSION = "0.4.0"
+ENGINE_VERSION = "0.5.0"
 
 
 def health_check() -> dict[str, Any]:

@@ -8,6 +8,8 @@ import type {
 } from './jobs'
 
 import type {
+  SelectedOrganizerAsset,
+  SelectedPdf,
   SelectedPdfFile,
 } from './dialogs'
 
@@ -40,6 +42,9 @@ declare global {
 
         selectPdfFiles: () =>
           Promise<SelectedPdfFile[]>
+
+        selectOrganizerAssets: () =>
+          Promise<SelectedOrganizerAsset[]>
 
         saveMergedPdf: (
           sourceFilePath?: string,

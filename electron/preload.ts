@@ -13,6 +13,7 @@ import type {
 
 import type {
   SelectedPdfFile,
+  SelectedOrganizerAsset,
 } from './types/dialogs.js'
 
 contextBridge.exposeInMainWorld('desktopAPI', {
@@ -56,6 +57,12 @@ contextBridge.exposeInMainWorld('desktopAPI', {
       ipcRenderer.invoke(
         'dialog:save-organized-pdf',
         sourceFilePath,
+      ),
+
+    selectOrganizerAssets:
+    (): Promise<SelectedOrganizerAsset[]> =>
+      ipcRenderer.invoke(
+        'dialog:select-organizer-assets',
       ),
   },
   file: {

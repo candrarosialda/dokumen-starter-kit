@@ -151,6 +151,11 @@ export function PageOrganizerPanel() {
     >(null)
 
   const [
+    isLoading,
+    setIsLoading,
+  ] = useState(false)
+
+  const [
     isImporting,
     setIsImporting,
   ] = useState(false)
